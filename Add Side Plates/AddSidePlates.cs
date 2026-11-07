@@ -19,7 +19,7 @@ public record ModMetadata : IModMetadata
     public string Name { get; init; } = "Add Side Plates";
     public string Author { get; init; } = "DrollerCandy";
     public List<string>? Contributors { get; init; }
-    public SemanticVersioning.Version Version { get; init; } = new("0.1.0");
+    public SemanticVersioning.Version Version { get; init; } = new("0.2.0");
     public Range SptVersion { get; init; } = new("~4.1.5");
     public bool HasPrepatcher { get; init; }
     public List<string>? Incompatibilities { get; init; }
@@ -94,9 +94,9 @@ public class AddSidePlates(
                 string.Equals(slot.Name, name, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
 
-        if (sourceSlots.Any(slot => slot is null))
+        if (sourceSlots.Any(slot => slot is null || slot.Properties?.Filters?.Any() != true))
         {
-            logger.Error($"Side plate slot template is missing one or more required slots: {config.SlotTemplateItemId}");
+            logger.Error($"Side plate slot template is missing one or more required slots or their filters: {config.SlotTemplateItemId}");
             return;
         }
 
@@ -127,11 +127,26 @@ public class AddSidePlates(
                     continue;
                 }
 
-                var slot = cloner.Clone(sourceSlots[index]!);
+                var sourceSlot = sourceSlots[index]!;
+                var slot = cloner.Clone(sourceSlot);
                 if (slot is null)
                 {
                     logger.Warning($"Could not clone {slotName} for item {itemId}");
                     continue;
+                }
+
+                var sourceFilters = sourceSlot.Properties!.Filters!.ToArray();
+                var clonedFilters = slot.Properties?.Filters?.ToArray();
+                if (clonedFilters is null || sourceFilters.Length != clonedFilters.Length)
+                {
+                    logger.Warning($"Could not clone collider filters for {slotName} on item {itemId}");
+                    continue;
+                }
+
+                foreach (var (sourceFilter, clonedFilter) in sourceFilters.Zip(clonedFilters))
+                {
+                    clonedFilter.ArmorColliders = cloner.Clone(sourceFilter.ArmorColliders);
+                    clonedFilter.ArmorPlateColliders = cloner.Clone(sourceFilter.ArmorPlateColliders);
                 }
 
                 slot.Id = CreateSlotId(itemId, slotName);
